@@ -84,6 +84,14 @@ export function matchFood(food, q) {
   return norm(q).split(/\s+/).every((w) => hay.includes(w));
 }
 
+// Trie les résultats : nom qui commence par la recherche, puis un mot qui commence par elle, puis le reste.
+export function rank(list, q, name = (x) => x.name) {
+  const w = norm(q).trim().split(/\s+/)[0];
+  if (!w) return list;
+  const score = (x) => { const n = norm(name(x)); return n.startsWith(w) ? 0 : n.split(/[\s'’-]+/).some((p) => p.startsWith(w)) ? 1 : 2; };
+  return list.map((x, i) => [score(x), i, x]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((e) => e[2]);
+}
+
 export const MEALS = ['Petit-déjeuner', 'Midi', 'Collation', 'Souper', 'Pendant l\'effort', 'Autre'];
 export function defaultMeal(date = new Date()) {
   const h = date.getHours();

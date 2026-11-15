@@ -3,7 +3,7 @@ import { state, saveSettings, exportData, importData, todayISO } from '../state.
 import { DEFAULT_RULES, DEFAULT_SNACK, computeBase } from '../calc.js';
 import { esc, fmt, parseNum, numInput, toast } from '../ui.js';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 
 const RULE_FIELDS = [
   ['activityFactor', 'Facteur vie quotidienne', 'ex. 1,2 = travail assis'],
@@ -165,7 +165,7 @@ export function render(root) {
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      const n = `${data.foods?.length ?? 0} aliments et ${data.days?.length ?? 0} jours`;
+      const n = `${data.foods?.length ?? 0} aliments, ${data.recipes?.length ?? 0} recettes et ${data.days?.length ?? 0} jours`;
       if (!confirm(`Importer ${n} ? Toutes les données actuelles seront remplacées.`)) return;
       await importData(data);
       toast('Sauvegarde importée');

@@ -5,13 +5,15 @@ import * as jour from './views/jour.js';
 import * as seance from './views/seance.js';
 import * as repas from './views/repas.js';
 import * as aliments from './views/aliments.js';
+import * as recettes from './views/recettes.js';
 import * as reglages from './views/reglages.js';
 
 const VIEWS = {
   jour: { mod: jour, dated: true },
   seance: { mod: seance, dated: true },
   repas: { mod: repas, dated: true },
-  aliments: { mod: aliments, title: 'Aliments' },
+  aliments: { mod: aliments, title: 'Cuisine' },
+  recettes: { mod: recettes, title: 'Cuisine', tab: 'aliments' },
   reglages: { mod: reglages, title: 'Réglages' },
 };
 
@@ -20,7 +22,7 @@ const currentTab = () => (location.hash.slice(1) in VIEWS ? location.hash.slice(
 export function render() {
   const tab = currentTab();
   const v = VIEWS[tab];
-  document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
+  document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('active', a.dataset.tab === (v.tab || tab)));
   document.getElementById('datebar').hidden = !v.dated;
   const title = document.getElementById('page-title');
   title.hidden = !!v.dated;

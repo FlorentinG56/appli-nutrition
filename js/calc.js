@@ -212,7 +212,8 @@ export function planMeal(items, share, step = 5) {
     autos.forEach((o, i) => {
       if (!o.byUnit) return;
       const w = num(o.food.unitWeight);
-      o.units = Math.max(1, Math.round(x[i] / w));
+      const st = num(o.food.unitStep) || 1; // ex. 0,5 pour les demi-portions de recette
+      o.units = Math.max(st, Math.round(x[i] / w / st) * st);
       o.grams = o.units * w;
       o.locked = true;
     });
@@ -226,4 +227,54 @@ export function planMeal(items, share, step = 5) {
   for (const o of out) { delete o.locked; o.values = foodValues(o.food, o.grams); }
   const total = out.reduce((t, o) => add(t, o.values), zero());
   return { items: out, total };
+}
+
+// ---------- Recettes ----------
+// ingredients : [{ food, grams }] (food = valeurs pour 100 g, nova)
+export function recipeTotals(ingredients, servings, cookedWeight) {
+  let total = zero(), rawWeight = 0, maxNova = null, nova4Kcal = 0;
+  const nova4 = [];
+  for (const ing of ingredients) {
+    const g = num(ing.grams) || 0;
+    const v = foodValues(ing.food, g);
+    total = add(total, v);
+    rawWeight += g;
+    const n = num(ing.food.nova);
+    if (n) maxNova = Math.max(maxNova || 0, n);
+    if (n === 4) { nova4Kcal += v.kcal; nova4.push(ing.food.name); }
+  }
+  const s = num(servings) > 0 ? servings : 1;
+  const cw = num(cookedWeight) > 0 ? cookedWeight : null;
+  const perServing = add(zero(), total, 1 / s);
+  const per100 = cw ? add(zero(), total, 100 / cw) : null;
+  return { total, perServing, per100, rawWeight, maxNova, nova4Kcal, nova4, nova4Share: total.kcal > 0 ? nova4Kcal / total.kcal : 0, servingWeight: cw ? cw / s : null };
+}
+
+// Adapte une recette à un autre nombre de portions (quantités et poids cuit au prorata).
+export function scaleRecipe(recipe, newServings) {
+  const k = newServings / (num(recipe.servings) || 1);
+  const round = (x, d) => Math.round(x * 10 ** d) / 10 ** d;
+  return {
+    ...recipe,
+    servings: newServings,
+    cookedWeight: num(recipe.cookedWeight) ? Math.round(recipe.cookedWeight * k) : recipe.cookedWeight,
+    ingredients: recipe.ingredients.map((i) => ({
+      ...i,
+      grams: round(i.grams * k, 1),
+      units: num(i.units) ? round(i.units * k, 1) : i.units,
+    })),
+  };
+}
+
+// Une recette vue comme un « aliment » pour l'écran Repas :
+// 1 unité = 1 portion (par pas de ½) ; au gramme si le poids cuit est connu.
+export function recipeAsFood(recipe, totals) {
+  const base = totals.per100 || totals.perServing; // sans poids cuit : « 100 g » fictifs = 1 portion
+  return {
+    id: 'r:' + recipe.id, recipeId: recipe.id, isRecipe: true, name: recipe.name,
+    kcal: base.kcal, p: base.p, c: base.c, f: base.f, fib: base.fib,
+    nova: totals.maxNova, nova4Share: totals.nova4Share,
+    unitWeight: totals.servingWeight || 100, unitName: 'portion', unitStep: 0.5,
+    unitOnly: !totals.per100, state: totals.per100 ? 'cuit' : '',
+  };
 }

@@ -7,14 +7,15 @@ Web-app (PWA) de suivi nutritionnel pour sportif d'endurance, installable sur iP
 - Sauvegarde et restauration par fichier JSON (Réglages › Sauvegardes).
 - Fonctionne hors ligne une fois installée.
 
-## Fonctions (étape 1)
+## Fonctions
 
 | Écran | Rôle |
 |---|---|
 | **Jour** | Ce qu'il reste pour la journée, barres kcal / protéines / glucides / lipides / fibres, journal par repas, saisie libre (resto), collation réservée. Flèches ◀ ▶ pour changer de jour. |
 | **Séance** | Séances du jour (course, trail, muscu, autre) → objectif calculé avec le détail du calcul. |
 | **Repas** | Choisir les aliments d'un repas → l'appli propose les grammes (ou un nombre d'unités) pour coller à la part du repas. |
-| **Aliments** | Base d'aliments : valeurs pour 100 g, cru/cuit, NOVA, portion du paquet, poids d'une unité. |
+| **Cuisine › Aliments** | Base d'aliments : valeurs pour 100 g, cru/cuit, NOVA, portion du paquet, poids d'une unité. |
+| **Cuisine › Recettes** | Fiches recettes : ingrédients de la base, apports totaux et par portion (et pour 100 g cuit si le plat est pesé), NOVA, étapes, temps, ustensiles, astuces. Adapter les portions, dupliquer, ajouter au journal (en portions ou en grammes). Une recette peut aussi servir dans l'écran Repas, par demi-portions. |
 | **Réglages** | Profil, règles de calcul, collation réservée, export / import. |
 
 ## Règles de calcul (modifiables dans Réglages)
@@ -36,7 +37,7 @@ js/calc.js      calculs (testés)
 js/db.js        stockage IndexedDB
 js/state.js     état partagé, export/import
 js/ui.js        outils d'affichage
-js/views/*.js   un fichier par écran
+js/views/*.js   un fichier par écran (recettes.js = fiches recettes)
 tests/          tests des calculs : node --test tests/calc.test.mjs
 ```
 

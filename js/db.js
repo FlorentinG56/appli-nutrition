@@ -1,6 +1,6 @@
 // Stockage sur le téléphone (IndexedDB). Rien ne quitte l'appareil.
 const DB_NAME = 'appli-nutrition';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // v2 : ajout des recettes
 let dbPromise;
 
 function open() {
@@ -12,8 +12,13 @@ function open() {
         if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('foods')) db.createObjectStore('foods', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('days')) db.createObjectStore('days', { keyPath: 'date' });
+        if (!db.objectStoreNames.contains('recipes')) db.createObjectStore('recipes', { keyPath: 'id' });
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        // Si une nouvelle version de l'appli doit mettre la base à jour, on libère l'ancienne connexion.
+        req.result.onversionchange = () => req.result.close();
+        resolve(req.result);
+      };
       req.onerror = () => reject(req.error);
     });
   }
@@ -39,8 +44,9 @@ export const db = {
   async replaceAll(data) {
     const conn = await open();
     return new Promise((resolve, reject) => {
-      const tx = conn.transaction(['settings', 'foods', 'days'], 'readwrite');
-      for (const name of ['settings', 'foods', 'days']) {
+      const stores = ['settings', 'foods', 'days', 'recipes'];
+      const tx = conn.transaction(stores, 'readwrite');
+      for (const name of stores) {
         const s = tx.objectStore(name);
         s.clear();
         for (const item of data[name] || []) s.put(item);
