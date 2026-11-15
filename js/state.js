@@ -8,8 +8,8 @@ export const state = {
   recipes: [],
   date: todayISO(),
   day: null,
-  // Brouillon de l'écran Repas (gardé en mémoire tant que l'appli est ouverte).
-  meal: { label: null, mealsLeft: null, items: [], result: null },
+  // Repas en préparation, par jour et par repas (gardés en mémoire tant que l'appli est ouverte).
+  drafts: {},
 };
 
 export function todayISO(d = new Date()) {

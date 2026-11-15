@@ -2,7 +2,7 @@
 import { state, saveDay, daySummary, newId, recipeById } from '../state.js';
 import { foodValues, snackValues, zero } from '../calc.js';
 import { esc, fmt, parseNum, numInput, toast, openSheet, closeSheet, bar, macroLine, MEALS, defaultMeal, novaBadge } from '../ui.js';
-import { pickFood } from './aliments.js';
+import { openComposer } from './composer.js';
 import { openRecipeEntryForm } from './recettes.js';
 
 export function render(root) {
@@ -39,14 +39,11 @@ export function render(root) {
     : '';
 
   root.innerHTML = `${head}${snackCard}
-    <div class="grid2">
-      <button class="btn-primary" id="add-entry">＋ Aliment</button>
-      <button id="add-manual">＋ Saisie libre</button>
-    </div>
-    <p class="hint center">Saisie libre : repas non maîtrisé (resto, invité), valeurs estimées.</p>
-    ${journal(day.entries, c)}`;
+    ${journal(day.entries, c)}
+    <button class="btn-block" id="add-manual">＋ Saisie libre (resto, invité)</button>
+    <p class="hint center">Repas non maîtrisé : vous estimez les valeurs, la journée s'ajuste.</p>`;
 
-  root.querySelector('#add-entry').onclick = () => pickFood('Ajouter au journal', (food) => openEntryForm({ kind: 'food', food }), (recipe) => openRecipeEntryForm({ recipe }));
+  root.querySelectorAll('[data-compose]').forEach((b) => { b.onclick = () => openComposer(b.dataset.compose); });
   root.querySelector('#add-manual').onclick = () => openManualForm(null);
   root.querySelector('#snack-eaten')?.addEventListener('click', async () => {
     day.entries.push({ id: newId(), kind: 'snack', name: snack.name + (day.snack.milk ? ' (au lait)' : ''), meal: 'Collation', values: snackValues(snack, day.snack.milk), time: Date.now() });
@@ -64,21 +61,25 @@ export function render(root) {
   });
 }
 
+const ALWAYS = ['Petit-déjeuner', 'Midi', 'Collation', 'Souper'];
+
 function journal(entries, c) {
-  if (!entries.length) return '<div class="card"><p class="muted center">Rien de noté pour ce jour.</p></div>';
-  const groups = MEALS.map((m) => [m, entries.filter((e) => e.meal === m)]).filter(([, l]) => l.length);
+  const groups = MEALS.map((m) => [m, entries.filter((e) => e.meal === m)]).filter(([m, l]) => l.length || ALWAYS.includes(m));
   const others = entries.filter((e) => !MEALS.includes(e.meal));
   if (others.length) groups.push(['Autre', others]);
   const nova4 = entries.reduce((t, e) => t + (e.kind === 'recipe' ? e.values.kcal * (e.nova4Share || 0) : e.nova === 4 ? e.values.kcal : 0), 0);
   return groups.map(([meal, list]) => {
     const sum = list.reduce((t, e) => t + e.values.kcal, 0);
-    return `<div class="card"><h2>${esc(meal)} <span class="muted small">${fmt(sum)} kcal</span></h2><ul class="list">
+    const draft = state.drafts?.[`${state.date}|${meal}`];
+    const label = draft?.items.length ? `↺ Reprendre (${draft.items.length} aliment${draft.items.length > 1 ? 's' : ''})` : list.length ? '＋ Ajouter' : '＋ Préparer ce repas';
+    return `<div class="card"><div class="row"><h2 style="margin:0">${esc(meal)} ${sum ? `<span class="muted small">${fmt(sum)} kcal</span>` : ''}</h2>
+      <button class="btn-small ${list.length ? '' : 'btn-primary'}" data-compose="${esc(meal)}" style="flex:none">${label}</button></div><ul class="list">
       ${list.map((e) => `<li class="tap" data-entry="${e.id}"><div class="grow">
         <div class="name">${e.kind === 'recipe' ? '📖 ' : ''}${esc(e.name)} ${novaBadge(e.nova)}</div>
         <div class="sub">${e.kind === 'food' ? `${e.units ? `${fmt(e.units, 1)} × ${esc(e.unitName || 'unité')} = ` : ''}${fmt(e.grams)} g${e.state ? ` ${esc(e.state)}` : ''} · ` : e.kind === 'manual' ? 'estimation · ' : e.kind === 'recipe' ? `${e.servings != null ? `${fmt(e.servings, 1)} portion${e.servings > 1 ? 's' : ''}` : `${fmt(e.grams)} g cuit`} · ` : ''}${macroLine(e.values)}</div>
       </div><span aria-hidden="true">›</span></li>`).join('')}
     </ul></div>`;
-  }).join('') + `<p class="center small muted">Total mangé : ${macroLine(c)} · fibres ${fmt(c.fib)} g${nova4 ? `<br>Ultra-transformés (NOVA 4) : ${fmt((nova4 / Math.max(1, c.kcal)) * 100)} % des kcal` : ''}</p>`;
+  }).join('') + (entries.length ? `<p class="center small muted">Total mangé : ${macroLine(c)} · fibres ${fmt(c.fib)} g${nova4 ? `<br>Ultra-transformés (NOVA 4) : ${fmt((nova4 / Math.max(1, c.kcal)) * 100)} % des kcal` : ''}</p>` : '');
 }
 
 // Ajout ou modification d'un aliment du journal.
