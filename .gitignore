@@ -1,0 +1,9 @@
+# Documents personnels : ne jamais les mettre dans le dépôt (il est public)
+cahier*
+Cahier*
+*.pdf
+*.docx
+# Fichiers de sauvegarde exportés depuis l'appli
+nutrition-sauvegarde-*.json
+.DS_Store
+node_modules/
