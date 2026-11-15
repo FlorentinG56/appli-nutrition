@@ -1,11 +1,11 @@
 // Service worker : garde une copie de l'appli sur le téléphone pour qu'elle marche hors ligne.
 // Stratégie « réseau d'abord » : en ligne, on récupère toujours la dernière version publiée ;
 // hors ligne, on sert la copie enregistrée.
-const CACHE = 'nutrition-v1';
+const CACHE = 'nutrition-v2';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/app.js', 'js/calc.js', 'js/db.js', 'js/state.js', 'js/ui.js',
-  'js/views/jour.js', 'js/views/seance.js', 'js/views/repas.js', 'js/views/aliments.js', 'js/views/reglages.js',
+  'js/views/jour.js', 'js/views/seance.js', 'js/views/repas.js', 'js/views/aliments.js', 'js/views/recettes.js', 'js/views/reglages.js',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 
@@ -25,7 +25,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-cache' }) // revalide auprès du serveur : jamais de vieux fichier mélangé à des nouveaux
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

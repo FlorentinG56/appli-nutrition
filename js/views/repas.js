@@ -1,5 +1,5 @@
 // Écran « Repas » : je choisis mes aliments, l'appli propose les quantités.
-import { state, saveDay, daySummary, newId, foodById } from '../state.js';
+import { state, saveDay, daySummary, newId, resolveFood as foodById, recipeById, recipeInfo } from '../state.js';
 import { mealShare, planMeal, add } from '../calc.js';
 import { esc, fmt, parseNum, numInput, toast, closeSheet, macroLine, MEALS, defaultMeal, novaBadge } from '../ui.js';
 import { pickFood } from './aliments.js';
@@ -54,12 +54,14 @@ export function render(root) {
     m.result = null;
     render(root);
   };
-  root.querySelector('#add-item').onclick = () => pickFood('Ajouter au repas', (food) => {
-    if (!m.items.some((it) => it.foodId === food.id)) m.items.push({ foodId: food.id, mode: 'auto', byUnit: !!food.unitWeight, amount: null });
+  const addItem = (id, byUnit) => {
+    if (!m.items.some((it) => it.foodId === id)) m.items.push({ foodId: id, mode: 'auto', byUnit, amount: null });
     m.result = null;
     closeSheet();
     render(root);
-  });
+  };
+  // Une recette compte à la portion (au gramme possible si son poids cuit est connu).
+  root.querySelector('#add-item').onclick = () => pickFood('Ajouter au repas', (food) => addItem(food.id, !!food.unitWeight), (r) => addItem('r:' + r.id, true));
 
   const items = root.querySelector('#items');
   items.onclick = (e) => {
@@ -96,6 +98,16 @@ export function render(root) {
     for (const it of m.result.items) {
       if (!(it.grams > 0)) continue;
       const f = it.food;
+      if (f.isRecipe) {
+        const r = recipeById(f.recipeId);
+        const t = recipeInfo(r);
+        state.day.entries.push({
+          id: newId(), kind: 'recipe', recipeId: r.id, name: r.name, perServing: t.perServing, per100: t.per100,
+          servingWeight: t.servingWeight, nova: t.maxNova, nova4Share: t.nova4Share,
+          servings: it.byUnit ? it.units : null, grams: it.byUnit ? null : it.grams, values: it.values, meal: m.label, time: Date.now(),
+        });
+        continue;
+      }
       state.day.entries.push({
         id: newId(), kind: 'food', foodId: f.id, name: f.name, brand: f.brand, state: f.state, nova: f.nova,
         per100: pick100(f), unitWeight: f.unitWeight || null, unitName: f.unitName || '',
@@ -117,12 +129,12 @@ function defaultAmount(it) {
 
 function itemCard(it, i) {
   const f = foodById(it.foodId);
-  const unitSeg = f.unitWeight
-    ? `<div class="seg"><button type="button" data-unit="g" class="${it.byUnit ? '' : 'on'}">Grammes</button><button type="button" data-unit="u" class="${it.byUnit ? 'on' : ''}">À l'unité</button></div>`
+  const unitSeg = f.unitWeight && !f.unitOnly
+    ? `<div class="seg"><button type="button" data-unit="g" class="${it.byUnit ? '' : 'on'}">Grammes</button><button type="button" data-unit="u" class="${it.byUnit ? 'on' : ''}">${f.isRecipe ? 'Portions' : 'À l\'unité'}</button></div>`
     : '';
   const amount = it.mode === 'auto' ? '' : `<label>${it.mode === 'free' ? 'Portion comptée' : 'Quantité'} (${it.byUnit ? esc(f.unitName || 'unités') : 'g'})</label>${numInput('amount', it.amount)}`;
   return `<div class="card" data-i="${i}" style="background:var(--bg)">
-    <div class="row"><div class="grow"><b>${esc(f.name)}</b> ${f.state ? `<span class="pill">${esc(f.state)}</span>` : ''} ${novaBadge(f.nova)}</div>
+    <div class="row"><div class="grow"><b>${f.isRecipe ? '📖 ' : ''}${esc(f.name)}</b> ${f.state ? `<span class="pill">${esc(f.state)}</span>` : ''} ${novaBadge(f.nova)}</div>
       <button type="button" class="btn-small btn-danger" data-remove style="flex:none" aria-label="Retirer">✕</button></div>
     <div class="seg">${MODES.map(([k, l]) => `<button type="button" data-mode="${k}" class="${it.mode === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     ${unitSeg}${amount}
@@ -133,7 +145,7 @@ function resultHtml(r, share, dayLeft) {
   const after = add(dayLeft, r.total, -1);
   const lines = r.items.map((it) => {
     const f = it.food;
-    const qty = it.units ? `${fmt(it.units)} ${esc(f.unitName || (it.units > 1 ? 'unités' : 'unité'))}` : `${fmt(it.grams)} g`;
+    const qty = it.units ? `${fmt(it.units, 1)} ${esc(plural(f.unitName || 'unité', it.units))}` : `${fmt(it.grams)} g`;
     const sub = [it.units ? `${fmt(it.grams)} g` : null, f.state || null, it.mode === 'free' ? 'à volonté' : it.mode === 'fixed' ? 'fixé' : null].filter(Boolean).join(' · ');
     return `<div class="result-item"><div><b>${esc(f.name)}</b>${f.nova === 4 ? ' ' + novaBadge(4) : ''}<div class="small muted">${sub}${it.grams > 0 ? '' : ' — pas nécessaire'}</div></div><div class="qty">${qty}</div></div>`;
   }).join('');
@@ -158,3 +170,5 @@ function resultHtml(r, share, dayLeft) {
   </div>`;
 }
 
+
+const plural = (w, n) => (n > 1 && !/[sx]$/.test(w) ? w + 's' : w);

@@ -139,3 +139,34 @@ test('totaux du journal', () => {
   assert.equal(t.kcal, 150);
   assert.equal(t.p, 11);
 });
+
+import { recipeTotals, scaleRecipe, recipeAsFood } from '../js/calc.js';
+const whey = { name: 'Whey', kcal: 400, p: 80, c: 7, f: 5, fib: 0, nova: 4 };
+
+test('recette : totaux, par portion, pour 100 g cuit, NOVA', () => {
+  const r = recipeTotals([{ food: pates, grams: 200 }, { food: poulet, grams: 300 }, { food: whey, grams: 30 }], 2, 1000);
+  near(r.total.kcal, 720 + 330 + 120, 0.01);
+  near(r.perServing.kcal, 585, 0.01);
+  near(r.per100.kcal, 117, 0.01);
+  assert.equal(r.servingWeight, 500);
+  assert.equal(r.maxNova, 4);
+  near(r.nova4Share, 120 / 1170, 0.001);
+  assert.equal(recipeTotals([{ food: pates, grams: 100 }], 2).per100, null);
+});
+
+test('recette : adapter le nombre de portions', () => {
+  const s = scaleRecipe({ servings: 2, cookedWeight: 1000, ingredients: [{ grams: 200 }, { grams: 100, units: 2 }] }, 3);
+  assert.equal(s.servings, 3);
+  assert.equal(s.cookedWeight, 1500);
+  assert.equal(s.ingredients[0].grams, 300);
+  assert.equal(s.ingredients[1].units, 3);
+});
+
+test('recette dans le calcul d\'un repas : par demi-portions', () => {
+  const t = recipeTotals([{ food: pates, grams: 300 }, { food: poulet, grams: 400 }], 4);
+  const food = recipeAsFood({ id: 'x', name: 'Pâtes poulet' }, t);
+  assert.equal(food.unitWeight, 100);
+  const r = planMeal([{ food, mode: 'auto', byUnit: true }], { kcal: 560, p: 40, c: 80, f: 6 });
+  assert.equal(r.items[0].units % 0.5, 0);
+  near(r.total.kcal, t.perServing.kcal * r.items[0].units, 0.01);
+});

@@ -1,10 +1,11 @@
 // État partagé de l'appli : réglages, aliments, journée affichée.
 import { db, newId } from './db.js';
-import { DEFAULT_RULES, DEFAULT_SNACK, computeTarget, totals, snackReserve } from './calc.js';
+import { DEFAULT_RULES, DEFAULT_SNACK, computeTarget, totals, snackReserve, recipeTotals, recipeAsFood } from './calc.js';
 
 export const state = {
   settings: null,
   foods: [],
+  recipes: [],
   date: todayISO(),
   day: null,
   // Brouillon de l'écran Repas (gardé en mémoire tant que l'appli est ouverte).
@@ -33,6 +34,8 @@ export async function loadAll() {
     : def;
   state.foods = await db.getAll('foods');
   sortFoods();
+  state.recipes = await db.getAll('recipes');
+  sortRecipes();
   await loadDay(state.date);
 }
 
@@ -73,6 +76,41 @@ export async function deleteFood(id) {
 
 export const foodById = (id) => state.foods.find((f) => f.id === id);
 
+// ---------- Recettes ----------
+function sortRecipes() {
+  state.recipes.sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
+}
+export async function saveRecipe(recipe) {
+  if (!recipe.id) recipe.id = newId();
+  await db.put('recipes', recipe);
+  const i = state.recipes.findIndex((r) => r.id === recipe.id);
+  if (i >= 0) state.recipes[i] = recipe; else state.recipes.push(recipe);
+  sortRecipes();
+  return recipe;
+}
+export async function deleteRecipe(id) {
+  await db.del('recipes', id);
+  state.recipes = state.recipes.filter((r) => r.id !== id);
+}
+export const recipeById = (id) => state.recipes.find((r) => r.id === id);
+
+// Ingrédient d'une recette : valeurs actuelles de l'aliment, ou la copie gardée s'il a été supprimé.
+export function ingredientFood(ing) {
+  return foodById(ing.foodId) || { ...ing.snapshot, missing: true };
+}
+export function recipeInfo(recipe) {
+  const list = recipe.ingredients.map((i) => ({ food: ingredientFood(i), grams: i.grams }));
+  return recipeTotals(list, recipe.servings, recipe.cookedWeight);
+}
+// Aliment ou recette (identifiant « r:… ») pour l'écran Repas.
+export function resolveFood(id) {
+  if (String(id).startsWith('r:')) {
+    const r = recipeById(id.slice(2));
+    return r ? recipeAsFood(r, recipeInfo(r)) : null;
+  }
+  return foodById(id);
+}
+
 // Résumé de la journée affichée : objectif, consommé, collation réservée, reste.
 export function daySummary() {
   const { profile, rules, snack } = state.settings;
@@ -90,6 +128,7 @@ export async function exportData() {
     settings: await db.getAll('settings'),
     foods: await db.getAll('foods'),
     days: await db.getAll('days'),
+    recipes: await db.getAll('recipes'),
   };
 }
 
@@ -97,7 +136,7 @@ export async function importData(data) {
   if (!data || data.app !== 'appli-nutrition' || !Array.isArray(data.foods) || !Array.isArray(data.days)) {
     throw new Error('Ce fichier n\'est pas une sauvegarde de l\'appli.');
   }
-  await db.replaceAll(data);
+  await db.replaceAll({ ...data, recipes: Array.isArray(data.recipes) ? data.recipes : [] });
   await loadAll();
 }
 

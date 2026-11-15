@@ -1,13 +1,13 @@
 // Écran « Aliments » : base d'aliments (ajout, recherche, modification).
 // Contient aussi le sélecteur d'aliment réutilisé par les écrans Jour et Repas.
-import { state, saveFood, deleteFood } from '../state.js';
-import { esc, fmt, parseNum, numInput, toast, openSheet, closeSheet, novaBadge, matchFood } from '../ui.js';
+import { state, saveFood, deleteFood, recipeInfo } from '../state.js';
+import { esc, fmt, parseNum, numInput, toast, openSheet, closeSheet, novaBadge, matchFood, rank } from '../ui.js';
 
 let query = '';
 
 export function render(root) {
-  const list = state.foods.filter((f) => matchFood(f, query));
-  root.innerHTML = `
+  const list = rank(state.foods.filter((f) => matchFood(f, query)), query);
+  root.innerHTML = `${cuisineSwitch('aliments')}
     <button class="btn-primary btn-block" id="add-food">＋ Nouvel aliment</button>
     <div class="card" style="margin-top:12px">
       <input type="search" id="food-search" placeholder="Rechercher (nom, marque, magasin)" value="${esc(query)}">
@@ -19,13 +19,19 @@ export function render(root) {
   const search = root.querySelector('#food-search');
   search.oninput = () => {
     query = search.value;
-    root.querySelector('.list').innerHTML = state.foods.filter((f) => matchFood(f, query)).map(foodRow).join('');
+    root.querySelector('.list').innerHTML = rank(state.foods.filter((f) => matchFood(f, query)), query).map(foodRow).join('');
   };
   root.querySelector('.list').onclick = (e) => {
     const li = e.target.closest('li[data-id]');
     if (li) openFoodForm(state.foods.find((f) => f.id === li.dataset.id), () => render(root));
   };
 }
+
+// Boutons « Aliments | Recettes » en haut de l'onglet Cuisine.
+export const cuisineSwitch = (on) => `<div class="seg" style="margin:0 0 12px">
+  <a class="btn ${on === 'aliments' ? 'on' : ''}" href="#aliments">🥕 Aliments</a>
+  <a class="btn ${on === 'recettes' ? 'on' : ''}" href="#recettes">📖 Recettes</a>
+</div>`;
 
 export function foodRow(f) {
   const details = [f.brand, f.store].filter(Boolean).map(esc).join(' · ');
@@ -131,20 +137,29 @@ export function openFoodForm(food, onDone) {
 }
 
 // Sélecteur d'aliment : recherche puis toucher un aliment pour le choisir.
-export function pickFood(title, onPick) {
+// Avec onPickRecipe, les recettes sont proposées aussi (en tête de liste).
+export function pickFood(title, onPick, onPickRecipe) {
   let q = '';
   const html = () => {
-    const list = state.foods.filter((f) => matchFood(f, q)).slice(0, 80);
-    return list.length ? list.map(foodRow).join('') : '<li class="muted">Aucun aliment trouvé.</li>';
+    const recipes = onPickRecipe ? rank(state.recipes.filter((r) => matchFood({ name: r.name }, q)), q) : [];
+    const list = rank(state.foods.filter((f) => matchFood(f, q)), q).slice(0, 80);
+    const rows = recipes.map((r) => {
+      const t = recipeInfo(r);
+      return `<li class="tap" data-rid="${r.id}"><div class="grow"><div class="name">📖 ${esc(r.name)} ${novaBadge(t.maxNova)}</div>
+        <div class="sub">Recette · par portion ${fmt(t.perServing.kcal)} kcal · P ${fmt(t.perServing.p)}</div></div></li>`;
+    }).join('') + list.map(foodRow).join('');
+    return rows || '<li class="muted">Aucun aliment trouvé.</li>';
   };
   openSheet(`
     <h2>${esc(title)}</h2>
-    <input type="search" id="pick-search" placeholder="Rechercher un aliment">
+    <input type="search" id="pick-search" placeholder="Rechercher ${onPickRecipe ? 'un aliment ou une recette' : 'un aliment'}">
     <button type="button" class="btn-block" id="pick-new">＋ Créer un nouvel aliment</button>
     <ul class="list" id="pick-list">${html()}</ul>`, (body) => {
     const input = body.querySelector('#pick-search');
     input.oninput = () => { q = input.value; body.querySelector('#pick-list').innerHTML = html(); };
     body.querySelector('#pick-list').onclick = (e) => {
+      const rli = e.target.closest('li[data-rid]');
+      if (rli) return onPickRecipe(state.recipes.find((r) => r.id === rli.dataset.rid));
       const li = e.target.closest('li[data-id]');
       if (li) onPick(state.foods.find((f) => f.id === li.dataset.id));
     };
