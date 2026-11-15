@@ -1,6 +1,6 @@
 // Écran « Réglages » : profil, règles de calcul, collation, sauvegardes.
 import { state, saveSettings, exportData, importData, todayISO } from '../state.js';
-import { DEFAULT_RULES, DEFAULT_SNACK, computeBase } from '../calc.js';
+import { DEFAULT_RULES, computeBase } from '../calc.js';
 import { esc, fmt, parseNum, numInput, toast } from '../ui.js';
 
 const APP_VERSION = '1.2.0';
@@ -21,7 +21,7 @@ const RULE_FIELDS = [
 ];
 
 export function render(root) {
-  const { profile, rules, snack } = state.settings;
+  const { profile, rules } = state.settings;
   const base = computeBase(profile, rules);
 
   root.innerHTML = `
@@ -69,16 +69,6 @@ export function render(root) {
       <button type="button" class="btn-small" id="reset-rules">Remettre les règles par défaut</button>
     </div>
 
-    <div class="card">
-      <h2>Collation réservée</h2>
-      <label>Nom</label><input name="snackName" value="${esc(snack.name)}">
-      <label>Description</label><input name="snackDesc" value="${esc(snack.description)}">
-      <h3>Valeurs (version de base)</h3>
-      <div class="grid3">${['kcal', 'p', 'c', 'f', 'fib'].map((k) => `<div><label>${LABELS[k]}</label>${numInput('sb_' + k, snack.base[k])}</div>`).join('')}</div>
-      <h3>En plus pour la version au lait</h3>
-      <div class="grid3">${['kcal', 'p', 'c', 'f', 'fib'].map((k) => `<div><label>${LABELS[k]}</label>${numInput('sm_' + k, snack.milk[k])}</div>`).join('')}</div>
-      <label class="check"><input type="checkbox" name="snackDefault" ${snack.defaultPlanned !== false ? 'checked' : ''}> Cochée par défaut chaque nouveau jour</label>
-    </div>
 
     <button type="submit" class="btn-primary btn-block" style="position:sticky;bottom:calc(var(--tabs-h) + env(safe-area-inset-bottom) + 8px);z-index:2">Enregistrer les réglages</button>
   </form>
@@ -110,29 +100,27 @@ export function render(root) {
     const p = { sex: seg.sex, age: v('age'), height: v('height'), weight: v('weight') };
     const r = { ...rules, baseMode: seg.baseMode, proteinMode: seg.proteinMode, fatMinMode: seg.fatMinMode, baseFixed: v('baseFixed'), proteinPerKg: v('proteinPerKg'), proteinFixed: v('proteinFixed'), fatMinPerKg: v('fatMinPerKg'), fatMinFixed: v('fatMinFixed'), useGarmin: form.elements.useGarmin.checked };
     for (const [k] of RULE_FIELDS) r[k] = v(k);
-    const sn = { ...snack, name: form.elements.snackName.value.trim() || DEFAULT_SNACK.name, description: form.elements.snackDesc.value.trim(), defaultPlanned: form.elements.snackDefault.checked, base: {}, milk: {} };
-    for (const k of ['kcal', 'p', 'c', 'f', 'fib']) { sn.base[k] = v('sb_' + k) || 0; sn.milk[k] = v('sm_' + k) || 0; }
-    return { p, r, sn };
+    return { p, r };
   };
   const preview = () => { const { p, r } = read(); root.querySelector('#base-preview').innerHTML = basePreview(computeBase(p, { ...DEFAULT_RULES, ...clean(r) }), r); };
   form.oninput = preview;
 
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const { p, r, sn } = read();
+    const { p, r } = read();
     const missing = [...RULE_FIELDS.map(([k]) => k), 'proteinPerKg', 'fatMinPerKg'].filter((k) => r[k] == null);
     if (missing.length) return toast('Une règle est vide : remplissez-la ou remettez les valeurs par défaut');
     if (r.baseMode === 'fixed' && !r.baseFixed) return toast('Indiquez le chiffre fixe des besoins de base');
     if (r.proteinMode === 'fixed' && !r.proteinFixed) return toast('Indiquez les protéines en g par jour');
     if (r.fatMinMode === 'fixed' && !r.fatMinFixed) return toast('Indiquez les lipides minimum en g par jour');
-    Object.assign(state.settings, { profile: p, rules: r, snack: sn });
+    Object.assign(state.settings, { profile: p, rules: r });
     await saveSettings();
     toast('Réglages enregistrés');
     render(root);
   };
 
   root.querySelector('#reset-rules').onclick = async () => {
-    if (!confirm('Remettre toutes les règles de calcul par défaut ? (Le profil et la collation ne changent pas.)')) return;
+    if (!confirm('Remettre toutes les règles de calcul par défaut ? (Le profil ne change pas.)')) return;
     state.settings.rules = { ...DEFAULT_RULES };
     await saveSettings();
     toast('Règles par défaut remises');
@@ -178,7 +166,6 @@ export function render(root) {
   };
 }
 
-const LABELS = { kcal: 'kcal', p: 'Prot. g', c: 'Gluc. g', f: 'Lip. g', fib: 'Fibres g' };
 const clean = (r) => Object.fromEntries(Object.entries(r).filter(([, v]) => v != null));
 
 function basePreview(base, rules) {

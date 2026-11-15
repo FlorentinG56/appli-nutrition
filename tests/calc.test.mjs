@@ -3,13 +3,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_RULES, DEFAULT_SNACK, computeTarget, mifflin, planMeal, mealShare, snackReserve, totals, zero,
+  DEFAULT_RULES, computeTarget, mifflin, planMeal, mealShare, estimateFromKcal, totals,
 } from '../js/calc.js';
 
 const profile = { sex: 'M', age: 40, height: 175, weight: 70 };
 const rules = { ...DEFAULT_RULES };
 const near = (a, b, tol = 1) => assert.ok(Math.abs(a - b) <= tol, `${a} ≉ ${b}`);
-const day = (sessions = [], extra = {}) => ({ sessions, entries: [], snack: { planned: true, milk: false }, ...extra });
+const day = (sessions = [], extra = {}) => ({ sessions, entries: [], ...extra });
 
 test('Mifflin-St Jeor', () => {
   near(mifflin(profile), 1598.75, 0.01);
@@ -81,20 +81,21 @@ test('profil incomplet', () => {
   assert.equal(computeTarget({}, rules, day()).error, 'profil');
 });
 
-test('collation réservée puis libérée quand elle est notée au journal', () => {
-  const d = day();
-  near(snackReserve(DEFAULT_SNACK, d).kcal, 236);
-  near(snackReserve(DEFAULT_SNACK, { ...d, snack: { planned: true, milk: true } }).kcal, 361);
-  near(snackReserve(DEFAULT_SNACK, { ...d, snack: { planned: false } }).kcal, 0);
-  near(snackReserve(DEFAULT_SNACK, { ...d, entries: [{ kind: 'snack', values: zero() }] }).kcal, 0);
-});
-
-test('part du repas = (objectif − consommé − collation) ÷ repas restants', () => {
+test('part du repas = (objectif − consommé) ÷ repas restants', () => {
   const target = { kcal: 2000, p: 150, c: 200, f: 70, fib: 30 };
   const consumed = { kcal: 500, p: 30, c: 60, f: 20, fib: 5 };
-  const s = mealShare(target, consumed, { kcal: 236, p: 24, c: 33, f: 2, fib: 4 }, 2);
-  near(s.kcal, 632);
-  near(s.p, 48);
+  const s = mealShare(target, consumed, 2);
+  near(s.kcal, 750);
+  near(s.p, 60);
+  near(mealShare(target, { ...consumed, kcal: 2500 }, 1).kcal, 0);
+});
+
+test('saisie libre : macros estimées depuis les kcal', () => {
+  const e = estimateFromKcal(800);
+  near(e.p, 40);
+  near(e.c, 90);
+  near(e.f, 31.1, 0.1);
+  near(4 * e.p + 4 * e.c + 9 * e.f, 800, 0.01);
 });
 
 const pates = { name: 'Pâtes crues', kcal: 360, p: 12, c: 72, f: 1.5, fib: 3 };

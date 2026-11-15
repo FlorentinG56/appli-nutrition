@@ -11,7 +11,7 @@ Web-app (PWA) de suivi nutritionnel pour sportif d'endurance, installable sur iP
 
 | Écran | Rôle |
 |---|---|
-| **Jour** | Ce qu'il reste pour la journée, barres kcal / protéines / glucides / lipides / fibres, collation réservée. Pour chaque repas : « Préparer ce repas » → je choisis mes aliments, l'appli calcule aussitôt la quantité de chacun (aliment fixé, à volonté, à l'unité, recette en portions), puis ajout au journal. Saisie libre (resto). Flèches ◀ ▶ pour changer de jour. |
+| **Jour** | Ce qu'il reste pour la journée et barres kcal / protéines / glucides / lipides / fibres. Chaque repas a 3 boutons : **🥕 Aliments** (je choisis mes aliments, l'appli calcule aussitôt la quantité de chacun), **📖 Recette** (une recette entière en un geste, ex. Collation A), **✏️ Saisie libre** (resto, invité : estimation rapide par taille de repas). Flèches ◀ ▶ pour changer de jour. |
 | **Séance** | Séances du jour (course, trail, muscu, autre) → objectif calculé avec le détail du calcul. |
 | **Cuisine › Aliments** | Base d'aliments : valeurs pour 100 g, cru/cuit, NOVA, portion du paquet, poids d'une unité. **Remplissage automatique** : photo du code-barres (fiche Open Food Facts, NOVA compris) ou photo du tableau « Valeur nutritive » (lu dans le téléphone, converti pour 100 g), photo des ingrédients pour estimer le NOVA. Toujours vérifié avant d'enregistrer. |
 | **Cuisine › Recettes** | Fiches recettes : ingrédients de la base, apports totaux et par portion (et pour 100 g cuit si le plat est pesé), NOVA, étapes, temps, ustensiles, astuces. Adapter les portions, dupliquer, ajouter au journal (en portions ou en grammes). Une recette peut aussi servir dans l'écran Repas, par demi-portions. |

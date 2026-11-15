@@ -28,16 +28,6 @@ export const DEFAULT_RULES = {
   fiberTarget: 30,
 };
 
-// Collation réservée chaque jour (modifiable dans Réglages).
-export const DEFAULT_SNACK = {
-  name: 'Collation A',
-  description: '1 pomme (~180 g) + 1 c. à thé de miel (7 g) + 30 g de whey dans l\'eau',
-  base: { kcal: 236, p: 24.5, c: 33, f: 2, fib: 4 },
-  milkLabel: '+ 250 ml de lait au lieu de l\'eau',
-  milk: { kcal: 125, p: 9, c: 12, f: 5, fib: 0 },
-  defaultPlanned: true,
-};
-
 export const SESSION_TYPES = {
   course: { label: 'Course', kind: 'run' },
   trail: { label: 'Trail', kind: 'run' },
@@ -134,23 +124,19 @@ export function totals(entries) {
   return (entries || []).reduce((t, e) => add(t, e.values), zero());
 }
 
-export function snackValues(snack, milk) {
-  return milk ? add(snack.base, snack.milk) : add(zero(), snack.base);
-}
-
-// La collation reste réservée tant qu'elle est prévue et pas encore notée au journal.
-export function snackReserve(snack, day) {
-  if (!day.snack?.planned) return zero();
-  if ((day.entries || []).some((e) => e.kind === 'snack')) return zero();
-  return snackValues(snack, day.snack.milk);
-}
-
-// Part du repas : (objectif − consommé − collation réservée) ÷ repas restants.
-export function mealShare(target, consumed, reserve, mealsLeft) {
+// Part du repas : (objectif − déjà mangé) ÷ repas restants.
+export function mealShare(target, consumed, mealsLeft) {
   const n = Math.max(1, mealsLeft || 1);
   const r = zero();
-  for (const k of KEYS) r[k] = Math.max(0, target[k] - consumed[k] - reserve[k]) / n;
+  for (const k of KEYS) r[k] = Math.max(0, target[k] - consumed[k]) / n;
   return r;
+}
+
+// Saisie libre : macros estimées à partir des kcal (repas « moyen » de restaurant :
+// 20 % protéines, 45 % glucides, 35 % lipides) quand on ne les connaît pas.
+export const ESTIMATE_SPLIT = { p: 0.2, c: 0.45, f: 0.35 };
+export function estimateFromKcal(kcal) {
+  return { kcal, p: (kcal * ESTIMATE_SPLIT.p) / 4, c: (kcal * ESTIMATE_SPLIT.c) / 4, f: (kcal * ESTIMATE_SPLIT.f) / 9, fib: kcal / 100 };
 }
 
 // ---------- Calcul des quantités d'un repas ----------

@@ -1,6 +1,7 @@
 // État partagé de l'appli : réglages, aliments, journée affichée.
 import { db, newId } from './db.js';
-import { DEFAULT_RULES, DEFAULT_SNACK, computeTarget, totals, snackReserve, recipeTotals, recipeAsFood } from './calc.js';
+import { DEFAULT_RULES, computeTarget, totals, recipeTotals, recipeAsFood } from './calc.js';
+import { COLLATION_A } from './starter.js';
 
 export const state = {
   settings: null,
@@ -23,19 +24,20 @@ export function shiftDate(iso, days) {
 }
 
 function defaultSettings() {
-  return { id: 'main', profile: { sex: 'M', age: null, height: null, weight: null }, rules: { ...DEFAULT_RULES }, snack: structuredClone(DEFAULT_SNACK) };
+  return { id: 'main', profile: { sex: 'M', age: null, height: null, weight: null }, rules: { ...DEFAULT_RULES } };
 }
 
 export async function loadAll() {
   const saved = await db.get('settings', 'main');
   const def = defaultSettings();
   state.settings = saved
-    ? { ...def, ...saved, profile: { ...def.profile, ...saved.profile }, rules: { ...def.rules, ...saved.rules }, snack: { ...def.snack, ...saved.snack } }
+    ? { ...def, ...saved, profile: { ...def.profile, ...saved.profile }, rules: { ...def.rules, ...saved.rules } }
     : def;
   state.foods = await db.getAll('foods');
   sortFoods();
   state.recipes = await db.getAll('recipes');
   sortRecipes();
+  await addCollationRecipe();
   await loadDay(state.date);
 }
 
@@ -48,7 +50,7 @@ export async function saveSettings() {
 }
 
 export function emptyDay(date) {
-  return { date, sessions: [], intense: false, eve: false, snack: { planned: state.settings.snack.defaultPlanned !== false, milk: false }, entries: [] };
+  return { date, sessions: [], intense: false, eve: false, entries: [] };
 }
 
 export async function loadDay(date) {
@@ -111,13 +113,30 @@ export function resolveFood(id) {
   return foodById(id);
 }
 
+// Une seule fois : la collation A devient une recette (avec ses aliments, repris
+// de la base s'ils y sont déjà). L'ancien réglage « collation réservée » disparaît.
+async function addCollationRecipe() {
+  if (state.settings.collationRecipeDone) return;
+  state.settings.collationRecipeDone = true;
+  delete state.settings.snack;
+  await saveSettings();
+  if (state.recipes.some((r) => /collation/i.test(r.name))) return;
+  const ingredients = [];
+  for (const ing of COLLATION_A.ingredients) {
+    let food = state.foods.find((f) => ing.match.test(f.name));
+    if (!food) food = await saveFood({ ...ing.food });
+    const { name, kcal, p, c, f, fib, nova, state: st, unitWeight, unitName } = food;
+    const grams = ing.units && food.unitWeight ? ing.units * food.unitWeight : ing.grams;
+    ingredients.push({ foodId: food.id, grams, units: ing.units && food.unitWeight ? ing.units : null, snapshot: { name, kcal, p, c, f, fib, nova, state: st, unitWeight, unitName } });
+  }
+  await saveRecipe({ ...COLLATION_A.recipe, ingredients });
+}
+
 // Résumé de la journée affichée : objectif, consommé, collation réservée, reste.
 export function daySummary() {
-  const { profile, rules, snack } = state.settings;
+  const { profile, rules } = state.settings;
   const t = computeTarget(profile, rules, state.day);
-  const consumed = totals(state.day.entries);
-  const reserve = snackReserve(snack, state.day);
-  return { ...t, consumed, reserve };
+  return { ...t, consumed: totals(state.day.entries) };
 }
 
 export async function exportData() {
