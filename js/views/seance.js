@@ -1,13 +1,13 @@
 // Écran « Séance » : saisie de l'entraînement du jour et détail du calcul de l'objectif.
 import { state, saveDay, daySummary, newId } from '../state.js';
-import { SESSION_TYPES, sessionEnergy, snackValues } from '../calc.js';
+import { SESSION_TYPES, sessionEnergy } from '../calc.js';
 import { esc, fmt, parseNum, parseDuration, formatDuration, numInput, toast, openSheet, closeSheet, macroLine } from '../ui.js';
 
 const LEVEL_TEXT = ['moins de 1 h', 'de 1 h à 2 h', 'plus de 2 h', 'aucun déficit'];
 
 export function render(root) {
   const day = state.day;
-  const { rules, snack } = state.settings;
+  const { rules } = state.settings;
   const s = daySummary();
 
   root.innerHTML = `
@@ -22,10 +22,6 @@ export function render(root) {
       <label class="check"><input type="checkbox" id="f-intense" ${day.intense ? 'checked' : ''}> Séance intense (fractionné, côtes)</label>
       <label class="check"><input type="checkbox" id="f-eve" ${day.eve ? 'checked' : ''}> Veille d'une grosse sortie</label>
       <p class="hint">Chaque case réduit le déficit d'un cran (cumulable, jusqu'à 0).</p>
-      <h3>${esc(snack.name)}</h3>
-      <label class="check"><input type="checkbox" id="f-snack" ${day.snack?.planned ? 'checked' : ''}> ${esc(snack.name)} prévue</label>
-      <label class="check"><input type="checkbox" id="f-milk" ${day.snack?.milk ? 'checked' : ''} ${day.snack?.planned ? '' : 'disabled'}> Version au lait (grosse journée)</label>
-      <p class="hint">${esc(snack.description)} — ${macroLine(snackValues(snack, day.snack?.milk))}. Réservée dans l'objectif tant qu'elle n'est pas notée au journal.</p>
     </div>
 
     ${detail(s, rules)}`;
@@ -38,8 +34,6 @@ export function render(root) {
   const flag = (id, fn) => { root.querySelector(id).onchange = async (e) => { fn(e.target.checked); await saveDay(); render(root); }; };
   flag('#f-intense', (v) => { day.intense = v; });
   flag('#f-eve', (v) => { day.eve = v; });
-  flag('#f-snack', (v) => { day.snack = { ...day.snack, planned: v }; });
-  flag('#f-milk', (v) => { day.snack = { ...day.snack, milk: v }; });
 }
 
 function sessionRow(x, rules) {

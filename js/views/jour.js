@@ -33,10 +33,13 @@ export function render(root) {
     </div>`;
   }
 
-  const snackCard = day.snack?.planned && !day.entries.some((e) => e.kind === 'snack')
-    ? `<div class="card"><div class="row"><div><b>${esc(snack.name)}${day.snack.milk ? ' (au lait)' : ''}</b> réservée<div class="small muted">${macroLine(s.reserve)}</div></div>
-       <button class="btn-primary" id="snack-eaten" style="flex:none">✔ Prise</button></div></div>`
-    : '';
+  // Collation de 15 h : mise de côté dans l'objectif tant qu'elle n'est pas prise.
+  const eaten = day.entries.some((e) => e.kind === 'snack');
+  const snackCard = eaten ? '' : day.snack?.planned
+    ? `<div class="card"><div class="row"><div><b>${esc(snack.name)}${day.snack.milk ? ' (au lait)' : ''}</b> mise de côté<div class="small muted">${macroLine(s.reserve)}</div></div>
+       <button class="btn-primary" id="snack-eaten" style="flex:none">✔ Prise</button></div>
+       <div class="row" style="margin-top:8px"><button class="btn-small" data-snack="milk">${day.snack.milk ? 'Version à l\'eau' : 'Version au lait'}</button><button class="btn-small" data-snack="off">Pas aujourd'hui</button></div></div>`
+    : `<p class="center small"><button class="btn-small" data-snack="on">＋ Prévoir la ${esc(snack.name)} aujourd'hui</button></p>`;
 
   root.innerHTML = `${head}${snackCard}
     ${journal(day.entries, c)}
@@ -45,6 +48,14 @@ export function render(root) {
 
   root.querySelectorAll('[data-compose]').forEach((b) => { b.onclick = () => openComposer(b.dataset.compose); });
   root.querySelector('#add-manual').onclick = () => openManualForm(null);
+  root.querySelectorAll('[data-snack]').forEach((b) => {
+    b.onclick = async () => {
+      const a = b.dataset.snack;
+      day.snack = { ...day.snack, planned: a !== 'off', milk: a === 'milk' ? !day.snack.milk : day.snack?.milk };
+      await saveDay();
+      render(root);
+    };
+  });
   root.querySelector('#snack-eaten')?.addEventListener('click', async () => {
     day.entries.push({ id: newId(), kind: 'snack', name: snack.name + (day.snack.milk ? ' (au lait)' : ''), meal: 'Collation', values: snackValues(snack, day.snack.milk), time: Date.now() });
     await saveDay();
