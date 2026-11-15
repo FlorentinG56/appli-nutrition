@@ -3,7 +3,6 @@ import { state, loadAll, loadDay, shiftDate, todayISO } from './state.js';
 import { formatDate, closeSheet, esc } from './ui.js';
 import * as jour from './views/jour.js';
 import * as seance from './views/seance.js';
-import * as repas from './views/repas.js';
 import * as aliments from './views/aliments.js';
 import * as recettes from './views/recettes.js';
 import * as reglages from './views/reglages.js';
@@ -11,12 +10,13 @@ import * as reglages from './views/reglages.js';
 const VIEWS = {
   jour: { mod: jour, dated: true },
   seance: { mod: seance, dated: true },
-  repas: { mod: repas, dated: true },
   aliments: { mod: aliments, title: 'Cuisine' },
   recettes: { mod: recettes, title: 'Cuisine', tab: 'aliments' },
   reglages: { mod: reglages, title: 'Réglages' },
 };
 
+// L'ancien onglet Repas est maintenant sur la page Jour.
+if (location.hash === '#repas') history.replaceState(null, '', '#jour');
 const currentTab = () => (location.hash.slice(1) in VIEWS ? location.hash.slice(1) : 'jour');
 
 export function render() {
@@ -36,7 +36,6 @@ state.rerender = render;
 
 async function goToDate(iso) {
   await loadDay(iso);
-  state.meal.result = null;
   render();
   window.scrollTo(0, 0);
 }

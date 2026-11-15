@@ -1,6 +1,8 @@
 // Écran « Aliments » : base d'aliments (ajout, recherche, modification).
 // Contient aussi le sélecteur d'aliment réutilisé par les écrans Jour et Repas.
 import { state, saveFood, deleteFood, recipeInfo } from '../state.js';
+import { readBarcode, lookupBarcode, readText } from '../scan.js';
+import { parseNutritionText, estimateNova, to100, guessState } from '../label.js';
 import { esc, fmt, parseNum, numInput, toast, openSheet, closeSheet, novaBadge, matchFood, rank } from '../ui.js';
 
 let query = '';
@@ -52,6 +54,20 @@ export function openFoodForm(food, onDone) {
   const stores = [...new Set(state.foods.map((x) => x.store).filter(Boolean))];
   openSheet(`
     <h2>${food ? 'Modifier l\'aliment' : 'Nouvel aliment'}</h2>
+    <div class="card autofill">
+      <b>Remplir automatiquement</b>
+      <div class="grid2" style="margin-top:8px">
+        <button type="button" data-scan="barcode">📷 Code-barres</button>
+        <button type="button" data-scan="label">📷 Tableau nutritionnel</button>
+      </div>
+      <button type="button" class="btn-small btn-block" data-scan="ingredients">📷 Liste d'ingrédients (pour le NOVA)</button>
+      <details class="small" style="margin-top:8px"><summary>Taper le code-barres à la main</summary>
+        <div class="row" style="margin-top:6px"><input id="bar-code" inputmode="numeric" placeholder="ex. 0064200116183" value="${esc(f.barcode || '')}"><button type="button" class="btn-small" id="bar-go" style="flex:none">Chercher</button></div>
+      </details>
+      <div id="scan-status" class="small"></div>
+      <img id="scan-photo" alt="Photo de l'étiquette" hidden style="width:100%;border-radius:10px;margin-top:8px">
+      <input type="file" id="scan-file" accept="image/*" hidden>
+    </div>
     <form id="food-form" autocomplete="off">
       <label>Nom *</label>
       <input name="name" required value="${esc(f.name)}" placeholder="ex. Pâtes penne">
@@ -76,6 +92,7 @@ export function openFoodForm(food, onDone) {
       <div class="seg" data-seg="nova">
         ${[1, 2, 3, 4].map((n) => `<button type="button" data-v="${n}" class="${f.nova === n ? 'on' : ''}">${n}</button>`).join('')}
       </div>
+      <p class="hint" id="nova-reason"></p>
       <p class="hint">1 = brut (œuf, riz, poulet) · 2 = ingrédient culinaire (huile, beurre, miel) · 3 = transformé (pain, fromage, conserve) · 4 = ultra-transformé (additifs, arômes, émulsifiants).</p>
 
       <div class="grid2">
@@ -91,6 +108,11 @@ export function openFoodForm(food, onDone) {
     </form>`, (body) => {
     const form = body.querySelector('#food-form');
     const seg = { state: f.state || '', nova: f.nova || null };
+    const setSeg = (key, v) => {
+      seg[key] = v;
+      body.querySelectorAll(`[data-seg="${key}"] button`).forEach((x) => x.classList.toggle('on', (key === 'nova' ? Number(x.dataset.v) : x.dataset.v) === v));
+    };
+    const extra = { barcode: f.barcode || null };
     body.querySelectorAll('[data-seg]').forEach((el) => {
       el.onclick = (e) => {
         const b = e.target.closest('button');
@@ -114,7 +136,7 @@ export function openFoodForm(food, onDone) {
     check();
     form.onsubmit = async (e) => {
       e.preventDefault();
-      const data = { ...f, name: form.elements.name.value.trim(), brand: form.elements.brand.value.trim(), store: form.elements.store.value.trim(), unitName: form.elements.unitName.value.trim(), state: seg.state, nova: seg.nova };
+      const data = { ...f, barcode: extra.barcode || parseNum(body.querySelector('#bar-code').value) && body.querySelector('#bar-code').value.trim() || null, name: form.elements.name.value.trim(), brand: form.elements.brand.value.trim(), store: form.elements.store.value.trim(), unitName: form.elements.unitName.value.trim(), state: seg.state, nova: seg.nova };
       for (const [k] of FIELDS) data[k] = parseNum(form.elements[k].value);
       data.packPortion = parseNum(form.elements.packPortion.value);
       data.unitWeight = parseNum(form.elements.unitWeight.value);
@@ -126,6 +148,7 @@ export function openFoodForm(food, onDone) {
       toast(food ? 'Aliment modifié' : 'Aliment ajouté');
       onDone?.(saved);
     };
+    setupAutofill(body, form, { setSeg, extra, check, current: f });
     body.querySelector('#del-food')?.addEventListener('click', async () => {
       if (!confirm(`Supprimer « ${f.name} » de la base ? Les journaux déjà enregistrés ne changent pas.`)) return;
       await deleteFood(f.id);
@@ -138,7 +161,7 @@ export function openFoodForm(food, onDone) {
 
 // Sélecteur d'aliment : recherche puis toucher un aliment pour le choisir.
 // Avec onPickRecipe, les recettes sont proposées aussi (en tête de liste).
-export function pickFood(title, onPick, onPickRecipe) {
+export function pickFood(title, onPick, onPickRecipe, onBack) {
   let q = '';
   const html = () => {
     const recipes = onPickRecipe ? rank(state.recipes.filter((r) => matchFood({ name: r.name }, q)), q) : [];
@@ -151,6 +174,7 @@ export function pickFood(title, onPick, onPickRecipe) {
     return rows || '<li class="muted">Aucun aliment trouvé.</li>';
   };
   openSheet(`
+    ${onBack ? '<button type="button" class="btn-small" id="pick-back">‹ Retour</button>' : ''}
     <h2>${esc(title)}</h2>
     <input type="search" id="pick-search" placeholder="Rechercher ${onPickRecipe ? 'un aliment ou une recette' : 'un aliment'}">
     <button type="button" class="btn-block" id="pick-new">＋ Créer un nouvel aliment</button>
@@ -163,6 +187,110 @@ export function pickFood(title, onPick, onPickRecipe) {
       const li = e.target.closest('li[data-id]');
       if (li) onPick(state.foods.find((f) => f.id === li.dataset.id));
     };
+    body.querySelector('#pick-back')?.addEventListener('click', onBack);
     body.querySelector('#pick-new').onclick = () => openFoodForm(null, (food) => food && onPick(food));
   });
+}
+
+// ---------- Remplissage automatique (code-barres, photo du tableau, ingrédients) ----------
+function setupAutofill(body, form, { setSeg, extra, check, current }) {
+  const status = body.querySelector('#scan-status');
+  const fileInput = body.querySelector('#scan-file');
+  const photo = body.querySelector('#scan-photo');
+  let mode = null;
+  const say = (html, cls = '') => { status.className = `small notice ${cls}`; status.innerHTML = html; };
+  const setVal = (name, v) => {
+    if (v == null || v === '') return;
+    const el = form.elements[name];
+    el.value = typeof v === 'number' ? String(v).replace('.', ',') : v;
+    el.classList.add('filled');
+  };
+  const fillValues = (v) => { for (const k of ['kcal', 'p', 'c', 'f', 'fib']) setVal(k, v[k]); check(); };
+  const showNova = (est, source) => {
+    if (!est) return;
+    setSeg('nova', est.nova);
+    body.querySelector('#nova-reason').textContent = `NOVA ${est.nova} ${source} : ${est.reason}. À vérifier.`;
+  };
+
+  body.querySelectorAll('[data-scan]').forEach((b) => {
+    b.onclick = () => { mode = b.dataset.scan; fileInput.value = ''; fileInput.click(); };
+  });
+  fileInput.onchange = async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    photo.src = URL.createObjectURL(file);
+    photo.hidden = false;
+    try {
+      if (mode === 'barcode') {
+        say('Lecture du code-barres…');
+        const code = await readBarcode(file);
+        if (!code) return say('Code-barres non lu. Reprenez la photo de plus près, bien à plat et net, ou tapez le code à la main.', 'warn');
+        await byBarcode(code);
+      } else {
+        say('Préparation de la lecture…');
+        const text = await readText(file, (msg) => say(msg));
+        if (mode === 'label') byLabelText(text); else byIngredients(text);
+      }
+    } catch (err) {
+      say(`Échec : ${esc(err.message)}`, 'warn');
+    }
+  };
+  body.querySelector('#bar-go').onclick = () => {
+    const code = body.querySelector('#bar-code').value.replace(/\D/g, '');
+    if (code.length < 8) return toast('Code-barres trop court');
+    byBarcode(code).catch((err) => say(`Échec : ${esc(err.message)}`, 'warn'));
+  };
+
+  async function byBarcode(code) {
+    extra.barcode = code;
+    body.querySelector('#bar-code').value = code;
+    const dup = state.foods.find((x) => x.barcode === code && x.id !== current.id);
+    say(`Code ${esc(code)} : recherche dans Open Food Facts…`);
+    let p;
+    try { p = await lookupBarcode(code); } catch (err) {
+      return say(`Code ${esc(code)} lu, mais la recherche a échoué (${esc(err.message)}). Vérifiez la connexion, ou prenez le tableau nutritionnel en photo.`, 'warn');
+    }
+    const dupMsg = dup ? `<br>⚠️ Cet article est déjà dans votre base : « ${esc(dup.name)} ».` : '';
+    if (!p || p.incomplete) {
+      if (p?.name) setVal('name', p.name);
+      return say(`Code ${esc(code)} : ${p ? 'produit trouvé mais sans valeurs nutritives' : 'produit inconnu d\'Open Food Facts'}. 👉 Prenez maintenant le <b>tableau nutritionnel</b> en photo.${dupMsg}`, 'warn');
+    }
+    setVal('name', p.name);
+    setVal('brand', p.brand);
+    fillValues(p);
+    if (p.packPortion) setVal('packPortion', p.packPortion);
+    if (p.state) setSeg('state', p.state);
+    if (p.nova) showNova({ nova: p.nova, reason: 'classement Open Food Facts' }, 'selon Open Food Facts');
+    else showNova(estimateNova(p.ingredients), 'estimé d\'après les ingrédients');
+    const miss = ['kcal', 'p', 'c', 'f'].filter((k) => p[k] == null);
+    say(`✔ Produit trouvé : <b>${esc(p.name || 'sans nom')}</b>${p.brand ? ` (${esc(p.brand)})` : ''}. Valeurs pour 100 g remplies (cases jaunes).${miss.length ? ' Certaines valeurs manquent : complétez-les.' : ''} <b>Vérifiez avec l'emballage avant d'enregistrer.</b>${dupMsg}`);
+  }
+
+  function byLabelText(text) {
+    const r = parseNutritionText(text);
+    if (r.found < 2) {
+      return say('Je n\'arrive pas à lire le tableau. Conseils : photo bien à plat, de face, sans reflet, le tableau doit remplir la photo.', 'warn');
+    }
+    const apply = (serving) => fillValues(to100(r.raw, serving));
+    apply(r.serving);
+    const st = guessState(form.elements.name.value);
+    if (st && !current.state) setSeg('state', st);
+    if (r.serving && r.serving !== 100 && !form.elements.packPortion.value) setVal('packPortion', r.serving);
+    const raw = r.raw;
+    say(`✔ Tableau lu. Valeurs lues ${r.serving ? '' : '(<b>portion non lue</b>)'} :
+      ${fmt(raw.kcal)} kcal · P ${fmt(raw.p, 1)} · G ${fmt(raw.c, 1)} · L ${fmt(raw.f, 1)} · fibres ${fmt(raw.fib, 1)}
+      <label>pour une portion de (g)</label><input id="serving-g" inputmode="decimal" value="${r.serving ? String(r.serving).replace('.', ',') : ''}" placeholder="ex. 85">
+      <span class="hint">Converties automatiquement pour 100 g. Corrigez la portion si besoin.${r.missing.length ? ` Non lu : ${r.missing.map((k) => ({ kcal: 'kcal', p: 'protéines', c: 'glucides', f: 'lipides' }[k])).join(', ')}.` : ''}</span>
+      <b>Vérifiez chaque case jaune avec l'emballage avant d'enregistrer.</b>`);
+    status.querySelector('#serving-g').oninput = (e) => { const g = parseNum(e.target.value); if (g > 0) apply(g); };
+    const nova = estimateNova(text);
+    if (nova) showNova(nova, 'estimé d\'après les ingrédients');
+  }
+
+  function byIngredients(text) {
+    const nova = estimateNova(text) || estimateNova('ingrédients : ' + text);
+    if (!nova) return say('Liste d\'ingrédients non lue. Reprenez la photo, bien nette.', 'warn');
+    showNova(nova, 'estimé d\'après les ingrédients');
+    say(`✔ Ingrédients lus (${nova.count}). NOVA ${nova.nova} proposé : ${esc(nova.reason)}. Vérifiez.`);
+  }
 }

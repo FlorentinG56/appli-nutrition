@@ -3,7 +3,7 @@ import { state, saveSettings, exportData, importData, todayISO } from '../state.
 import { DEFAULT_RULES, DEFAULT_SNACK, computeBase } from '../calc.js';
 import { esc, fmt, parseNum, numInput, toast } from '../ui.js';
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 
 const RULE_FIELDS = [
   ['activityFactor', 'Facteur vie quotidienne', 'ex. 1,2 = travail assis'],
