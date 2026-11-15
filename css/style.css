@@ -193,3 +193,6 @@ input.filled { background: #fff8d6; border-color: #d4a514; }
 .item-card { background: var(--bg); }
 .item-card .qty { font-size: 24px; font-weight: 800; color: var(--primary); white-space: nowrap; flex: none; }
 .item-card .qty small { font-size: 14px; font-weight: 600; }
+.meal-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.meal-actions button { font-size: 15px; padding: 6px 4px; }
+#sizes button { font-size: 14px; line-height: 1.2; }

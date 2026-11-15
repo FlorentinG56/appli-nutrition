@@ -1,13 +1,12 @@
 // Écran « Jour » : objectif, ce qui a été mangé, ce qu'il reste.
 import { state, saveDay, daySummary, newId, recipeById } from '../state.js';
-import { foodValues, snackValues, zero } from '../calc.js';
+import { foodValues, zero, estimateFromKcal } from '../calc.js';
 import { esc, fmt, parseNum, numInput, toast, openSheet, closeSheet, bar, macroLine, MEALS, defaultMeal, novaBadge } from '../ui.js';
 import { openComposer } from './composer.js';
-import { openRecipeEntryForm } from './recettes.js';
+import { openRecipeEntryForm, pickRecipe } from './recettes.js';
 
 export function render(root) {
   const day = state.day;
-  const { snack } = state.settings;
   const s = daySummary();
   const c = s.consumed;
 
@@ -16,14 +15,14 @@ export function render(root) {
     head = `<div class="card warn"><h2>Bienvenue 👋</h2><p>Pour calculer votre objectif, complétez d'abord votre profil (âge, taille, poids) dans <a href="#reglages">Réglages</a>.</p></div>`;
   } else {
     const t = s.target;
-    const left = t.kcal - c.kcal - s.reserve.kcal;
+    const left = t.kcal - c.kcal;
     head = `<div class="card">
       ${day.sessions.length ? '' : '<p class="notice">Aucune séance saisie : objectif d\'un jour de repos. <a href="#seance">Saisir la séance</a></p>'}
       <div class="center">
         <div class="muted small">Il reste pour la journée</div>
         <div class="big" style="color:${left < 0 ? 'var(--warn)' : 'var(--primary)'}">${fmt(left)} kcal</div>
-        <div class="small">P ${fmt(t.p - c.p - s.reserve.p)} g · G ${fmt(t.c - c.c - s.reserve.c)} g · L ${fmt(t.f - c.f - s.reserve.f)} g</div>
-        <div class="muted small">Objectif ${fmt(t.kcal)} kcal${s.reserve.kcal ? `, ${esc(snack.name)} déjà mise de côté` : ''}</div>
+        <div class="small">P ${fmt(t.p - c.p)} g · G ${fmt(t.c - c.c)} g · L ${fmt(t.f - c.f)} g</div>
+        <div class="muted small">Objectif ${fmt(t.kcal)} kcal</div>
       </div>
       ${bar('Calories', c.kcal, t.kcal, 'kcal')}
       ${bar('Protéines', c.p, t.p)}
@@ -33,24 +32,12 @@ export function render(root) {
     </div>`;
   }
 
-  const snackCard = day.snack?.planned && !day.entries.some((e) => e.kind === 'snack')
-    ? `<div class="card"><div class="row"><div><b>${esc(snack.name)}${day.snack.milk ? ' (au lait)' : ''}</b> réservée<div class="small muted">${macroLine(s.reserve)}</div></div>
-       <button class="btn-primary" id="snack-eaten" style="flex:none">✔ Prise</button></div></div>`
-    : '';
-
-  root.innerHTML = `${head}${snackCard}
-    ${journal(day.entries, c)}
-    <button class="btn-block" id="add-manual">＋ Saisie libre (resto, invité)</button>
-    <p class="hint center">Repas non maîtrisé : vous estimez les valeurs, la journée s'ajuste.</p>`;
+  root.innerHTML = `${head}
+    ${journal(day.entries, c)}`;
 
   root.querySelectorAll('[data-compose]').forEach((b) => { b.onclick = () => openComposer(b.dataset.compose); });
-  root.querySelector('#add-manual').onclick = () => openManualForm(null);
-  root.querySelector('#snack-eaten')?.addEventListener('click', async () => {
-    day.entries.push({ id: newId(), kind: 'snack', name: snack.name + (day.snack.milk ? ' (au lait)' : ''), meal: 'Collation', values: snackValues(snack, day.snack.milk), time: Date.now() });
-    await saveDay();
-    toast(`${snack.name} notée`);
-    render(root);
-  });
+  root.querySelectorAll('[data-recipe]').forEach((b) => { b.onclick = () => pickRecipe(b.dataset.recipe); });
+  root.querySelectorAll('[data-manual]').forEach((b) => { b.onclick = () => openManualForm(null, b.dataset.manual); });
   root.querySelectorAll('li[data-entry]').forEach((li) => {
     li.onclick = () => {
       const e = day.entries.find((x) => x.id === li.dataset.entry);
@@ -71,9 +58,13 @@ function journal(entries, c) {
   return groups.map(([meal, list]) => {
     const sum = list.reduce((t, e) => t + e.values.kcal, 0);
     const draft = state.drafts?.[`${state.date}|${meal}`];
-    const label = draft?.items.length ? `↺ Reprendre (${draft.items.length} aliment${draft.items.length > 1 ? 's' : ''})` : list.length ? '＋ Ajouter' : '＋ Préparer ce repas';
-    return `<div class="card"><div class="row"><h2 style="margin:0">${esc(meal)} ${sum ? `<span class="muted small">${fmt(sum)} kcal</span>` : ''}</h2>
-      <button class="btn-small ${list.length ? '' : 'btn-primary'}" data-compose="${esc(meal)}" style="flex:none">${label}</button></div><ul class="list">
+    const n = draft?.items.length;
+    return `<div class="card"><h2>${esc(meal)} ${sum ? `<span class="muted small">${fmt(sum)} kcal</span>` : ''}</h2>
+      <div class="meal-actions">
+        <button class="btn-small btn-primary" data-compose="${esc(meal)}">🥕 Aliments${n ? ` (${n})` : ''}</button>
+        <button class="btn-small" data-recipe="${esc(meal)}">📖 Recette</button>
+        <button class="btn-small" data-manual="${esc(meal)}">✏️ Saisie libre</button>
+      </div><ul class="list">
       ${list.map((e) => `<li class="tap" data-entry="${e.id}"><div class="grow">
         <div class="name">${e.kind === 'recipe' ? '📖 ' : ''}${esc(e.name)} ${novaBadge(e.nova)}</div>
         <div class="sub">${e.kind === 'food' ? `${e.units ? `${fmt(e.units, 1)} × ${esc(e.unitName || 'unité')} = ` : ''}${fmt(e.grams)} g${e.state ? ` ${esc(e.state)}` : ''} · ` : e.kind === 'manual' ? 'estimation · ' : e.kind === 'recipe' ? `${e.servings != null ? `${fmt(e.servings, 1)} portion${e.servings > 1 ? 's' : ''}` : `${fmt(e.grams)} g cuit`} · ` : ''}${macroLine(e.values)}</div>
@@ -161,8 +152,10 @@ export function pick100(food) {
   return { kcal: food.kcal || 0, p: food.p || 0, c: food.c || 0, f: food.f || 0, fib: food.fib || 0 };
 }
 
-// Saisie libre (repas non maîtrisé) ou modification de la collation notée.
-function openManualForm(entry) {
+// Saisie libre : repas non maîtrisé (resto, invité), noté en gros.
+// Sans les macros, on les estime à partir des kcal.
+const SIZES = [['Petit', 450], ['Normal', 750], ['Copieux', 1100], ['Très copieux', 1500]];
+function openManualForm(entry, meal) {
   const v = entry?.values || zero();
   const isSnack = entry?.kind === 'snack';
   openSheet(`
@@ -170,7 +163,9 @@ function openManualForm(entry) {
     <form id="manual-form" autocomplete="off">
       ${isSnack ? '' : `<label>Description</label><input name="name" value="${esc(entry?.name || '')}" placeholder="ex. Resto : burger + frites">`}
       <label>Repas</label>
-      <select name="meal">${MEALS.map((m) => `<option ${m === (entry?.meal || defaultMeal()) ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
+      <select name="meal">${MEALS.map((m) => `<option ${m === (entry?.meal || meal || defaultMeal()) ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
+      ${entry ? '' : `<label>Taille du repas (estimation rapide)</label>
+      <div class="seg" id="sizes">${SIZES.map(([l, k]) => `<button type="button" data-k="${k}">${l}<br><small>~${fmt(k)}</small></button>`).join('')}</div>`}
       <div class="grid2">
         <div><label>kcal</label>${numInput('kcal', entry ? Math.round(v.kcal) : '')}</div>
         <div><label>Protéines (g)</label>${numInput('p', entry ? Math.round(v.p) : '')}</div>
@@ -179,16 +174,24 @@ function openManualForm(entry) {
         <div><label>Fibres (g)</label>${numInput('fib', entry ? Math.round(v.fib) : '')}</div>
       </div>
       ${isSnack ? '' : `<label class="check"><input type="checkbox" name="nova4" ${entry?.nova === 4 ? 'checked' : ''}> Plutôt ultra-transformé (NOVA 4)</label>`}
-      <p class="hint">Estimation sans culpabiliser : le reste de la journée s'ajuste.</p>
+      <p class="hint">Seules les kcal sont obligatoires : si vous laissez protéines, glucides ou lipides vides, ils sont estimés (20 % / 45 % / 35 % des kcal). Estimation sans culpabiliser : le reste de la journée s'ajuste.</p>
       <button type="submit" class="btn-primary btn-block">${entry ? 'Enregistrer' : 'Ajouter au journal'}</button>
       ${entry ? '<button type="button" class="btn-danger btn-block" id="del-entry">Retirer du journal</button>' : ''}
     </form>`, (body) => {
     const form = body.querySelector('#manual-form');
+    body.querySelector('#sizes')?.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      form.elements.kcal.value = b.dataset.k;
+      body.querySelectorAll('#sizes button').forEach((x) => x.classList.toggle('on', x === b));
+    });
     form.onsubmit = async (e) => {
       e.preventDefault();
+      const kcal = parseNum(form.elements.kcal.value);
+      if (!kcal) return toast('Indiquez au moins les kcal (ou choisissez une taille)');
+      const est = estimateFromKcal(kcal);
       const values = zero();
-      for (const k of Object.keys(values)) values[k] = parseNum(form.elements[k].value) || 0;
-      if (!values.kcal) return toast('Indiquez au moins les kcal');
+      for (const k of Object.keys(values)) { const x = parseNum(form.elements[k].value); values[k] = x == null ? est[k] : x; }
       const data = entry || { id: newId(), kind: 'manual', time: Date.now() };
       if (!isSnack) {
         data.name = form.elements.name.value.trim() || 'Repas estimé';

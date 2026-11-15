@@ -4,7 +4,7 @@
 const CACHE = 'nutrition-v3';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
-  'js/app.js', 'js/calc.js', 'js/db.js', 'js/state.js', 'js/ui.js', 'js/label.js', 'js/scan.js',
+  'js/app.js', 'js/calc.js', 'js/db.js', 'js/state.js', 'js/ui.js', 'js/label.js', 'js/scan.js', 'js/starter.js',
   'js/views/jour.js', 'js/views/seance.js', 'js/views/composer.js', 'js/views/aliments.js', 'js/views/recettes.js', 'js/views/reglages.js',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];

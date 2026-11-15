@@ -1,7 +1,7 @@
 // Onglet Cuisine › Recettes : fiches recettes (ingrédients, préparation, apports).
 import { state, saveRecipe, deleteRecipe, recipeById, recipeInfo, ingredientFood, saveDay, newId } from '../state.js';
 import { recipeTotals, scaleRecipe, foodValues } from '../calc.js';
-import { esc, fmt, parseNum, parseDuration, formatDuration, numInput, toast, openSheet, closeSheet, novaBadge, matchFood, macroLine, MEALS, defaultMeal } from '../ui.js';
+import { esc, fmt, parseNum, parseDuration, formatDuration, numInput, toast, openSheet, closeSheet, novaBadge, matchFood, rank, macroLine, MEALS, defaultMeal } from '../ui.js';
 import { pickFood, cuisineSwitch } from './aliments.js';
 
 let query = '';
@@ -299,13 +299,13 @@ function ingEditor(ing, i) {
 
 // ---------- Journal ----------
 // Ajout d'une recette au journal (ou modification d'une ligne déjà notée).
-export function openRecipeEntryForm({ recipe, entry }) {
+export function openRecipeEntryForm({ recipe, entry, meal: mealArg }) {
   const t = recipe ? recipeInfo(recipe) : null;
   const perServing = entry ? entry.perServing : t.perServing;
   const per100 = entry ? entry.per100 : t.per100;
   const name = entry ? entry.name : recipe.name;
   let inGrams = entry ? entry.grams != null && entry.servings == null : false;
-  const meal = entry ? entry.meal : defaultMeal();
+  const meal = entry ? entry.meal : mealArg || defaultMeal();
 
   openSheet(`
     <h2>📖 ${esc(name)}</h2>
@@ -373,5 +373,29 @@ export function openRecipeEntryForm({ recipe, entry }) {
       toast('Retiré du journal');
       state.rerender();
     });
+  });
+}
+
+// Bouton « 📖 Recette » de la page Jour : choisir une recette pour ce repas.
+export function pickRecipe(meal) {
+  let q = '';
+  const rows = () => {
+    const list = rank(state.recipes.filter((r) => matchFood({ name: r.name }, q)), q);
+    return list.length ? list.map(recipeRow).join('') : '<li class="muted">Aucune recette trouvée.</li>';
+  };
+  if (!state.recipes.length) {
+    openSheet('<h2>Aucune recette</h2><p>Créez vos recettes dans <a href="#recettes">Cuisine › Recettes</a> : elles seront ensuite disponibles ici en un geste.</p>');
+    return;
+  }
+  openSheet(`
+    <h2>Recette pour : ${esc(meal)}</h2>
+    <input type="search" id="rpick-search" placeholder="Rechercher une recette">
+    <ul class="list" id="rpick-list">${rows()}</ul>`, (body) => {
+    const input = body.querySelector('#rpick-search');
+    input.oninput = () => { q = input.value; body.querySelector('#rpick-list').innerHTML = rows(); };
+    body.querySelector('#rpick-list').onclick = (e) => {
+      const li = e.target.closest('li[data-rid]');
+      if (li) openRecipeEntryForm({ recipe: recipeById(li.dataset.rid), meal });
+    };
   });
 }

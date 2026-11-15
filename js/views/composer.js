@@ -117,10 +117,10 @@ function itemCard(it, i) {
 // Recalcule tout et met à jour l'affichage sans toucher aux champs en cours de saisie.
 function update(body, meal, d) {
   const s = daySummary();
-  const share = mealShare(s.target, s.consumed, s.reserve, d.mealsLeft);
-  const dayLeft = mealShare(s.target, s.consumed, s.reserve, 1);
+  const share = mealShare(s.target, s.consumed, d.mealsLeft);
+  const dayLeft = mealShare(s.target, s.consumed, 1);
   body.querySelector('#share-box').innerHTML = `<b>Part de ce repas : ${fmt(share.kcal)} kcal</b><br>P ${fmt(share.p)} g · G ${fmt(share.c)} g · L ${fmt(share.f)} g
-    <div class="hint">Reste du jour ${fmt(dayLeft.kcal)} kcal${s.reserve.kcal ? `, ${esc(state.settings.snack.name)} déjà mise de côté` : ''}.</div>`;
+    <div class="hint">Reste du jour ${fmt(dayLeft.kcal)} kcal.</div>`;
   const out = body.querySelector('#result');
   if (!d.items.length) { out.innerHTML = ''; return; }
   const bad = d.items.find((it) => it.mode !== 'auto' && !(it.amount > 0));
